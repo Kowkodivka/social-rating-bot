@@ -1,0 +1,32 @@
+[package]
+name = "social-rating-bot"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev]
+debug = true
+overflow-checks = true
+opt-level = 0
+debug-assertions = true
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = false
+
+[dependencies]
+dotenv = "0.15.0"
+envy = "0.4.2"
+fluent = "0.16.1"
+intl-memoizer = "0.5.2"
+poise = "0.6.1"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.134"
+serenity = "0.12.4"
+sqlx = { version = "0.8.2", features = [ "runtime-tokio", "sqlite" ] }
+tokio = { version = "1.42.0", features = ["full"] }
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
