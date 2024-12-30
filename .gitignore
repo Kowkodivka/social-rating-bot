@@ -2,3 +2,4 @@
 Cargo.lock
 .env
 store.db
+show.fish

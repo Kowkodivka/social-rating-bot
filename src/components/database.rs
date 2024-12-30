@@ -1,4 +1,3 @@
-use sqlx::Row;
 use sqlx::{Error, Pool, Sqlite, SqlitePool};
 
 pub struct Database {
@@ -22,7 +21,6 @@ impl Database {
         )
         .execute(&self.pool)
         .await?;
-
         Ok(())
     }
 
@@ -44,12 +42,11 @@ impl Database {
         .bind(experience_gain)
         .execute(&self.pool)
         .await?;
-
         Ok(())
     }
 
     pub async fn get_user_experience(&self, user_id: i64) -> Result<Option<i64>, Error> {
-        let result = sqlx::query(
+        Ok(sqlx::query_scalar(
             r#"
             SELECT total_experience
             FROM user_experience
@@ -58,8 +55,6 @@ impl Database {
         )
         .bind(user_id)
         .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(result.map(|row| row.get(0)))
+        .await?)
     }
 }

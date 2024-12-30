@@ -1,4 +1,4 @@
-use envy::{self, Error as EnvyError};
+use envy::Error as EnvyError;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -9,7 +9,6 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, EnvyError> {
-        let config: Config = envy::from_env()?;
-        Ok(config)
+        envy::from_env()
     }
 }
