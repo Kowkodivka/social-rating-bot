@@ -1,6 +1,10 @@
+# Build output
 /target
+
+# Dependencies
 Cargo.lock
-.env
+
+# Local files
 store.db
-show.fish
+Config.toml
 todo.txt

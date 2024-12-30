@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use components::database::Database;
+use components::{config::Config, database::Database};
 use handlers::experience::ExperienceHandler;
 use poise::{Framework, FrameworkOptions, PrefixFrameworkOptions};
 use serenity::all::{ClientBuilder, GatewayIntents};
@@ -11,6 +11,7 @@ mod components;
 mod handlers;
 
 struct Data {
+    config: Config,
     database: Arc<Database>,
     translations: Arc<components::translation::Translations>,
 }
@@ -23,58 +24,64 @@ async fn main() -> Result<(), Error> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt().compact().init();
 
-    let config = components::config::Config::load()?;
+    // Загрузка конфигурации
+    let config = Config::load("./Config.toml")?;
 
+    // Клонируем config для использования в setup и ClientBuilder
+    let config_for_setup = config.clone();
+
+    // Инициализация базы данных
+    let database = Arc::new(Database::new("sqlite://store.db").await?);
+    database.initialize().await?;
+
+    // Загрузка переводов
+    let translations = Arc::new(components::translation::read_ftl()?);
+
+    // Регистрация команд
     let mut commands = vec![
-        // Basic
         commands::basic::ping(),
-        // Experience
         commands::experience::experience(),
-        // Reputation
         commands::reputation::repute(),
         commands::reputation::diminish(),
         commands::reputation::show_message_reputation(),
         commands::reputation::show_user_reputation(),
     ];
-
-    let database = Arc::new(Database::new("sqlite://store.db").await?);
-    database.initialize().await?;
-
-    let translations = Arc::new(components::translation::read_ftl()?);
     components::translation::apply_translations(&translations, &mut commands);
 
-    let data = Arc::new(Mutex::new(Data {
-        database: database.clone(),
-        translations: translations.clone(),
+    // Подготовка данных для передачи в контекст
+    let shared_data = Arc::new(Mutex::new(Data {
+        config: config.clone(),
+        database: Arc::clone(&database),
+        translations: Arc::clone(&translations),
     }));
 
+    // Настройка фреймворка
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
-
     let framework = Framework::builder()
         .options(FrameworkOptions {
             prefix_options: PrefixFrameworkOptions {
-                prefix: Some(config.discord_prefix),
+                prefix: Some(config.discord.prefix.clone()),
                 ..Default::default()
             },
             commands,
             ..Default::default()
         })
-        .setup(move |ctx, _ready, framework| {
-            let database = database.clone();
-            let translations = translations.clone();
-            Box::pin(async move {
-                poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                Ok(Data {
-                    database,
-                    translations,
-                })
-            })
+        .setup(move |_ctx, _ready, _framework| {
+            let data = Data {
+                config: config_for_setup,
+                database: Arc::clone(&database),
+                translations: Arc::clone(&translations),
+            };
+            Box::pin(async move { Ok(data) })
         })
         .build();
 
-    let mut client = ClientBuilder::new(&config.discord_token, intents)
+    // Создание и запуск клиента
+    let mut client = ClientBuilder::new(&config.discord.token, intents)
         .framework(framework)
-        .event_handler(ExperienceHandler { data })
+        .event_handler(ExperienceHandler {
+            data: Arc::clone(&shared_data),
+        })
         .await?;
 
     client.start().await?;
