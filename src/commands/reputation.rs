@@ -1,7 +1,7 @@
 use crate::{components::translation::translate, Context, Error};
 use poise::serenity_prelude as serenity;
 
-#[poise::command(context_menu_command = "Repute")]
+#[poise::command(context_menu_command = "Repute", prefix_command, slash_command)]
 pub async fn repute(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
     let db = &ctx.data().database;
 
@@ -49,7 +49,7 @@ pub async fn repute(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Erro
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Diminish")]
+#[poise::command(context_menu_command = "Diminish", prefix_command, slash_command)]
 pub async fn diminish(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
     let db = &ctx.data().database;
 
@@ -82,7 +82,11 @@ pub async fn diminish(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Er
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Show message reputation")]
+#[poise::command(
+    context_menu_command = "Show message reputation",
+    prefix_command,
+    slash_command
+)]
 pub async fn show_message_reputation(
     ctx: Context<'_>,
     msg: serenity::Message,
@@ -110,7 +114,11 @@ pub async fn show_message_reputation(
     Ok(())
 }
 
-#[poise::command(context_menu_command = "Show user reputation")]
+#[poise::command(
+    context_menu_command = "Show user reputation",
+    prefix_command,
+    slash_command
+)]
 pub async fn show_user_reputation(ctx: Context<'_>, user: serenity::User) -> Result<(), Error> {
     let db = &ctx.data().database;
 
