@@ -1,13 +1,7 @@
-use crate::{components::translation::translate, Data, Error};
+use crate::{components::translation::translate, Context, Error};
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn ping(ctx: poise::Context<'_, Data, Error>) -> Result<(), Error> {
-    ctx.reply(translate!(ctx, "ping-message")).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, slash_command)]
-pub async fn experience(ctx: poise::Context<'_, Data, Error>) -> Result<(), Error> {
+pub async fn experience(ctx: Context<'_>) -> Result<(), Error> {
     let user_id = ctx.author().id.get();
 
     let db = &ctx.data().database;

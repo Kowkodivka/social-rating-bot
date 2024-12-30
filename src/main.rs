@@ -25,7 +25,17 @@ async fn main() -> Result<(), Error> {
 
     let config = components::config::Config::load()?;
 
-    let mut commands = vec![commands::ping(), commands::experience()];
+    let mut commands = vec![
+        // Basic
+        commands::basic::ping(),
+        // Experience
+        commands::experience::experience(),
+        // Reputation
+        commands::reputation::repute(),
+        commands::reputation::diminish(),
+        commands::reputation::show_message_reputation(),
+        commands::reputation::show_user_reputation(),
+    ];
 
     let database = Arc::new(Database::new("sqlite://store.db").await?);
     database.initialize().await?;
