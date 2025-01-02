@@ -11,14 +11,15 @@ pub struct Discord {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Experience {
-    experience_per_message: usize,
-    experience_per_minute_voice: usize,
-    message_cooldown_seconds: usize,
+    pub experience_per_message: u64,
+    pub message_cooldown_seconds: u64,
+    pub experience_per_minute_voice: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub discord: Discord,
+    pub experience: Experience,
 }
 
 impl Config {

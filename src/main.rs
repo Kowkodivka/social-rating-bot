@@ -1,7 +1,10 @@
 use components::{config::Config, database::Database};
 use poise::serenity_prelude as serenity;
 use poise::{Framework, FrameworkOptions, PrefixFrameworkOptions};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::Mutex;
 
 mod commands;
 mod components;
@@ -11,6 +14,7 @@ struct Data {
     config: Arc<Config>,
     database: Arc<Database>,
     translations: Arc<components::translation::Translations>,
+    timestamps: Arc<Mutex<HashMap<u64, Instant>>>,
 }
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -26,6 +30,8 @@ async fn main() -> Result<(), Error> {
     database.initialize().await?;
 
     let translations = Arc::new(components::translation::read_ftl()?);
+
+    let timestamps = Arc::new(Mutex::new(HashMap::new()));
 
     let mut commands = vec![
         // Basic
@@ -50,15 +56,19 @@ async fn main() -> Result<(), Error> {
                 prefix: Some(config.discord.prefix.clone()),
                 ..Default::default()
             },
-            event_handler: |ctx, event, framework, data| {
+            event_handler: |_ctx, event, _framework, data| {
                 Box::pin(async move {
                     match event {
                         serenity::FullEvent::Message { new_message } => {
-                            handlers::experience::experience_message_handler().await?;
+                            handlers::experience::experience_message_handler(data, new_message)
+                                .await?;
                         }
 
                         serenity::FullEvent::VoiceStateUpdate { old, new } => {
-                            handlers::experience::experience_voice_handler().await?;
+                            if let Some(old) = old {
+                                handlers::experience::experience_voice_handler(data, old, new)
+                                    .await?;
+                            }
                         }
                         _ => {}
                     }
@@ -72,6 +82,7 @@ async fn main() -> Result<(), Error> {
             let config = Arc::clone(&config);
             let database = Arc::clone(&database);
             let translations = Arc::clone(&translations);
+            let timestamps = Arc::clone(&timestamps);
             move |ctx, _ready, framework| {
                 Box::pin(async move {
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
@@ -79,6 +90,7 @@ async fn main() -> Result<(), Error> {
                         config,
                         database,
                         translations,
+                        timestamps,
                     })
                 })
             }

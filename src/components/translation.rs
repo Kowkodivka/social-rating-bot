@@ -20,7 +20,6 @@ macro_rules! translate {
     }};
 }
 
-use tracing::info;
 pub(crate) use translate;
 
 pub fn format(
