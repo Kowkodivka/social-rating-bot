@@ -1,17 +1,14 @@
-use std::sync::Arc;
-
 use components::{config::Config, database::Database};
-use handlers::experience::ExperienceHandler;
+use poise::serenity_prelude as serenity;
 use poise::{Framework, FrameworkOptions, PrefixFrameworkOptions};
-use serenity::all::{ClientBuilder, GatewayIntents};
-use tokio::sync::Mutex;
+use std::sync::Arc;
 
 mod commands;
 mod components;
 mod handlers;
 
 struct Data {
-    config: Config,
+    config: Arc<Config>,
     database: Arc<Database>,
     translations: Arc<components::translation::Translations>,
 }
@@ -21,70 +18,79 @@ type Context<'a> = poise::Context<'a, Data, Error>;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    dotenv::dotenv().ok();
     tracing_subscriber::fmt().compact().init();
 
-    // Загрузка конфигурации
-    let config = Config::load("./Config.toml")?;
+    let config = Arc::new(Config::load("./Config.toml")?);
 
-    // Клонируем config для использования в setup и ClientBuilder
-    let config_for_setup = config.clone();
-
-    // Инициализация базы данных
     let database = Arc::new(Database::new("sqlite://store.db").await?);
     database.initialize().await?;
 
-    // Загрузка переводов
     let translations = Arc::new(components::translation::read_ftl()?);
 
-    // Регистрация команд
     let mut commands = vec![
+        // Basic
         commands::basic::ping(),
+        // Experience
         commands::experience::experience(),
+        // Reputation
         commands::reputation::repute(),
-        commands::reputation::diminish(),
+        commands::reputation::reverse_repute(),
         commands::reputation::show_message_reputation(),
         commands::reputation::show_user_reputation(),
     ];
+
     components::translation::apply_translations(&translations, &mut commands);
 
-    // Подготовка данных для передачи в контекст
-    let shared_data = Arc::new(Mutex::new(Data {
-        config: config.clone(),
-        database: Arc::clone(&database),
-        translations: Arc::clone(&translations),
-    }));
+    let intents =
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
-    // Настройка фреймворка
-    let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
     let framework = Framework::builder()
         .options(FrameworkOptions {
             prefix_options: PrefixFrameworkOptions {
                 prefix: Some(config.discord.prefix.clone()),
                 ..Default::default()
             },
+            event_handler: |ctx, event, framework, data| {
+                Box::pin(async move {
+                    match event {
+                        serenity::FullEvent::Message { new_message } => {
+                            handlers::experience::experience_message_handler().await?;
+                        }
+
+                        serenity::FullEvent::VoiceStateUpdate { old, new } => {
+                            handlers::experience::experience_voice_handler().await?;
+                        }
+                        _ => {}
+                    }
+                    Ok(())
+                })
+            },
             commands,
             ..Default::default()
         })
-        .setup(move |_ctx, _ready, _framework| {
-            let data = Data {
-                config: config_for_setup,
-                database: Arc::clone(&database),
-                translations: Arc::clone(&translations),
-            };
-            Box::pin(async move { Ok(data) })
+        .setup({
+            let config = Arc::clone(&config);
+            let database = Arc::clone(&database);
+            let translations = Arc::clone(&translations);
+            move |ctx, _ready, framework| {
+                Box::pin(async move {
+                    poise::builtins::register_globally(ctx, &framework.options().commands).await?;
+                    Ok(Data {
+                        config,
+                        database,
+                        translations,
+                    })
+                })
+            }
         })
         .build();
 
-    // Создание и запуск клиента
-    let mut client = ClientBuilder::new(&config.discord.token, intents)
+    let mut client = serenity::ClientBuilder::new(&config.discord.token, intents)
         .framework(framework)
-        .event_handler(ExperienceHandler {
-            data: Arc::clone(&shared_data),
-        })
         .await?;
 
-    client.start().await?;
+    tokio::spawn(handlers::experience::experience_voice_updater());
 
+    client.start().await?;
     Ok(())
 }

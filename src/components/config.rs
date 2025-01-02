@@ -10,6 +10,13 @@ pub struct Discord {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct Experience {
+    experience_per_message: usize,
+    experience_per_minute_voice: usize,
+    message_cooldown_seconds: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Config {
     pub discord: Discord,
 }

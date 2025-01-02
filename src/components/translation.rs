@@ -20,6 +20,7 @@ macro_rules! translate {
     }};
 }
 
+use tracing::info;
 pub(crate) use translate;
 
 pub fn format(
@@ -125,6 +126,49 @@ pub fn apply_translations(
                     );
                 }
             }
+
+            for subcommand in &mut command.subcommands {
+                let subcommand_key = format!("{}-{}", &command.name, &subcommand.name);
+
+                let localized_subcommand_name = match format(bundle, &subcommand_key, None, None) {
+                    Some(x) => x,
+                    None => continue,
+                };
+
+                subcommand
+                    .name_localizations
+                    .insert(locale.clone(), localized_subcommand_name);
+
+                subcommand.description_localizations.insert(
+                    locale.clone(),
+                    format(bundle, &subcommand_key, Some("description"), None).unwrap(),
+                );
+
+                for parameter in &mut subcommand.parameters {
+                    parameter.name_localizations.insert(
+                        locale.clone(),
+                        format(bundle, &subcommand_key, Some(&parameter.name), None).unwrap(),
+                    );
+
+                    parameter.description_localizations.insert(
+                        locale.clone(),
+                        format(
+                            bundle,
+                            &subcommand_key,
+                            Some(&format!("{}-description", parameter.name)),
+                            None,
+                        )
+                        .unwrap(),
+                    );
+
+                    for choice in &mut parameter.choices {
+                        choice.localizations.insert(
+                            locale.clone(),
+                            format(bundle, &choice.name, None, None).unwrap(),
+                        );
+                    }
+                }
+            }
         }
 
         let bundle = &translations.main;
@@ -150,6 +194,34 @@ pub fn apply_translations(
 
             for choice in &mut parameter.choices {
                 choice.name = format(bundle, &choice.name, None, None).unwrap();
+            }
+        }
+
+        for subcommand in &mut command.subcommands {
+            let subcommand_key = format!("{}-{}", &command.name, &subcommand.name);
+
+            subcommand.name = format(bundle, &subcommand_key, None, None).unwrap();
+
+            subcommand.description =
+                Some(format(bundle, &subcommand_key, Some("description"), None).unwrap());
+
+            for parameter in &mut subcommand.parameters {
+                parameter.name =
+                    format(bundle, &subcommand_key, Some(&parameter.name), None).unwrap();
+
+                parameter.description = Some(
+                    format(
+                        bundle,
+                        &subcommand_key,
+                        Some(&format!("{}-description", parameter.name)),
+                        None,
+                    )
+                    .unwrap(),
+                );
+
+                for choice in &mut parameter.choices {
+                    choice.name = format(bundle, &choice.name, None, None).unwrap();
+                }
             }
         }
     }

@@ -1,70 +1,54 @@
 use crate::{components::translation::translate, Context, Error};
 use poise::serenity_prelude as serenity;
 
-#[poise::command(context_menu_command = "Repute", prefix_command, slash_command)]
-pub async fn repute(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
+async fn check_experience(ctx: Context<'_>, required_experience: i64) -> Result<bool, Error> {
     let db = &ctx.data().database;
-
     let author_id = ctx.author().id.get() as i64;
-    let message_id = msg.id.get() as i64;
-    let user_id = msg.author.id.get() as i64;
+    let experience = db.fetch_user_experience(author_id).await.unwrap_or(Some(0));
 
-    let experience = db.get_user_experience(author_id).await.unwrap_or(Some(0));
-    if experience.unwrap_or(0) < 100 {
+    if experience.unwrap_or(0) < required_experience {
         ctx.send(
             poise::CreateReply::default()
                 .content(translate!(
                     ctx,
                     "not-enough-experience",
-                    required_experience: 100
+                    required_experience: required_experience
                 ))
                 .ephemeral(true),
         )
         .await?;
-        return Ok(());
+
+        return Ok(false);
     }
 
-    match db
-        .set_message_reputation(user_id, message_id, author_id, 1)
-        .await
-    {
-        Ok(_) => {
-            ctx.send(
-                poise::CreateReply::default()
-                    .content(translate!(ctx, "reputation-added"))
-                    .ephemeral(true),
-            )
-            .await?;
-        }
-        Err(_) => {
-            ctx.send(
-                poise::CreateReply::default()
-                    .content(translate!(ctx, "reputation-already-given"))
-                    .ephemeral(true),
-            )
-            .await?;
-        }
-    }
-
-    Ok(())
+    Ok(true)
 }
 
-#[poise::command(context_menu_command = "Diminish", prefix_command, slash_command)]
-pub async fn diminish(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
+async fn handle_reputation(
+    ctx: Context<'_>,
+    msg: serenity::Message,
+    reputation_change: i64,
+    success_key: &str,
+    already_given_key: &str,
+) -> Result<(), Error> {
     let db = &ctx.data().database;
+
+    if !check_experience(ctx, 100).await? {
+        return Ok(());
+    }
 
     let author_id = ctx.author().id.get() as i64;
     let message_id = msg.id.get() as i64;
     let user_id = msg.author.id.get() as i64;
 
     match db
-        .remove_message_reputation(user_id, message_id, author_id)
+        .add_message_reputation(user_id, message_id, author_id, reputation_change)
         .await
     {
         Ok(_) => {
             ctx.send(
                 poise::CreateReply::default()
-                    .content(translate!(ctx, "reputation-removed"))
+                    .content(translate!(ctx, success_key))
                     .ephemeral(true),
             )
             .await?;
@@ -72,7 +56,7 @@ pub async fn diminish(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Er
         Err(_) => {
             ctx.send(
                 poise::CreateReply::default()
-                    .content(translate!(ctx, "reputation-not-found"))
+                    .content(translate!(ctx, already_given_key))
                     .ephemeral(true),
             )
             .await?;
@@ -82,64 +66,70 @@ pub async fn diminish(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Er
     Ok(())
 }
 
-#[poise::command(
-    context_menu_command = "Show message reputation",
-    prefix_command,
-    slash_command
-)]
+#[poise::command(context_menu_command = "Repute")]
+pub async fn repute(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
+    handle_reputation(ctx, msg, 1, "reputation-added", "reputation-already-given").await
+}
+
+#[poise::command(context_menu_command = "Repute (reverse)")]
+pub async fn reverse_repute(ctx: Context<'_>, msg: serenity::Message) -> Result<(), Error> {
+    handle_reputation(
+        ctx,
+        msg,
+        -1,
+        "reputation-decreased",
+        "reputation-already-given",
+    )
+    .await
+}
+
+async fn send_reputation_info(
+    ctx: Context<'_>,
+    content_key: &str,
+    target_name: &str,
+    reputation: i64,
+) -> Result<(), Error> {
+    ctx.send(
+        poise::CreateReply::default()
+            .content(translate!(
+                ctx,
+                content_key,
+                target_name: target_name,
+                reputation: reputation
+            ))
+            .ephemeral(true),
+    )
+    .await?;
+    Ok(())
+}
+
+#[poise::command(context_menu_command = "Show message reputation")]
 pub async fn show_message_reputation(
     ctx: Context<'_>,
     msg: serenity::Message,
 ) -> Result<(), Error> {
     let db = &ctx.data().database;
-
     let message_id = msg.id.get() as i64;
     let reputation = db
-        .get_message_reputation(message_id)
+        .fetch_message_reputation(message_id)
         .await
         .unwrap_or(Some(0));
-
-    ctx.send(
-        poise::CreateReply::default()
-            .content(translate!(
-                ctx,
-                "message-reputation",
-                message_content: &msg.content,
-                reputation: reputation.unwrap_or(0)
-            ))
-            .ephemeral(true),
+    send_reputation_info(
+        ctx,
+        "message-reputation",
+        &msg.content,
+        reputation.unwrap_or(0),
     )
-    .await?;
-
-    Ok(())
+    .await
 }
 
-#[poise::command(
-    context_menu_command = "Show user reputation",
-    prefix_command,
-    slash_command
-)]
+#[poise::command(context_menu_command = "Show user reputation")]
 pub async fn show_user_reputation(ctx: Context<'_>, user: serenity::User) -> Result<(), Error> {
     let db = &ctx.data().database;
-
     let user_id = user.id.get() as i64;
-
     let reputation = db
-        .get_user_global_reputation(user_id)
+        .fetch_user_global_reputation(user_id)
         .await
         .unwrap_or(Some(0));
-
-    ctx.send(
-        poise::CreateReply::default()
-            .content(translate!(
-                ctx,
-                "user-reputation",
-                user_name: &user.name,
-                reputation: reputation.unwrap_or(0)
-            ))
-            .ephemeral(true),
-    )
-    .await?;
-
-    Ok(())
+    send_reputation_info(ctx, "user-reputation", &user.name, reputation.unwrap_or(0)).await
 }
